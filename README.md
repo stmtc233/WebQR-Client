@@ -2,6 +2,8 @@
 
 WebQR Client 是一个 Android 应用程序，旨在扫描二维码并将扫描内容实时上传至指定的 Web 服务器。该应用适用于需要通过移动设备扫描二维码并在网页端进行展示或处理的场景，例如动态二维码签到、库存管理或会议入场验证等。
 
+已实测可学习通动态二维码(10s)签到
+
 WebQR Client is an Android application designed to scan QR codes and upload the content to a specified web server in real-time. It is suitable for scenarios requiring QR code scanning via mobile devices with display or processing on a web page, such as dynamic QR code check-ins, inventory management, or event entry verification.
 
 ## 后端项目 / Backend Project
@@ -60,9 +62,13 @@ To protect your server addresses, API configuration is separated from the codeba
 *   连接您的 Android 设备或启动模拟器。
 *   在 Android Studio 中点击 **Run** (绿色播放按钮) 即可安装并运行应用。
 
-## 截图 / Screenshots
+## 演示
 
-*(此处可以预留截图位置 / Space for screenshots)*
+
+
+https://github.com/user-attachments/assets/48a92b60-5c9b-4ee5-9c3a-f5704bc4bb0c
+
+
 
 ## 许可证 / License
 
