@@ -1,11 +1,8 @@
 package com.example.webqrclient.network
 
+import com.example.webqrclient.BuildConfig
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
-
-import android.content.Context
-import android.content.SharedPreferences
-import com.example.webqrclient.BuildConfig
 
 object ApiClient {
     private const val DEFAULT_URL = BuildConfig.API_DEFAULT_URL
@@ -30,27 +27,20 @@ object ApiClient {
             return retrofit!!.create(ApiService::class.java)
         }
 
-    fun initialize(context: Context) {
-        // Always default to the default URL and do not remember previous selections.
-        currentBaseUrl = DEFAULT_URL
-    }
-
     fun setBaseUrl(url: String) {
         if (availableUrls.any { it.second == url }) {
             currentBaseUrl = url
-            // Do not save to SharedPreferences, so the selection is not remembered.
-            // Invalidate retrofit instance
             retrofit = null
         }
     }
 
-    fun getCurrentBaseUrl(): String {
+    fun getCurrentBaseUrl(): String = currentBaseUrl
+
+    fun getCurrentBaseUrlLabel(): String {
         val label = availableUrls.find { it.second == currentBaseUrl }?.first ?: ""
         return "$label: $currentBaseUrl"
     }
 
-    fun getSelectedIndex(): Int {
-        return availableUrls.indexOfFirst { it.second == currentBaseUrl }
-    }
-
+    fun getSelectedIndex(): Int =
+        availableUrls.indexOfFirst { it.second == currentBaseUrl }
 }

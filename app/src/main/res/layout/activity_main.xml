@@ -15,14 +15,15 @@
         android:id="@+id/statusTextView"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="#80000000"
+        android:background="@color/overlay_scrim"
         android:padding="16dp"
-        android:text="Initializing Camera..."
+        android:text="@string/status_initializing"
         android:textColor="@android:color/white"
         android:textSize="16sp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
+
     <com.google.android.material.slider.Slider
         android:id="@+id/zoomSlider"
         android:layout_width="0dp"
@@ -41,23 +42,23 @@
         android:id="@+id/switchApiButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Select API"
+        android:layout_marginBottom="16dp"
+        android:text="@string/api_select_button"
         app:layout_constraintBottom_toTopOf="@id/zoomSlider"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        android:layout_marginBottom="16dp"/>
+        app:layout_constraintStart_toStartOf="parent" />
 
     <TextView
         android:id="@+id/apiUrlTextView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Current API: "
-        android:textColor="@android:color/white"
-        android:background="#80000000"
-        android:padding="8dp"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
+        android:layout_marginStart="16dp"
         android:layout_marginTop="16dp"
-        android:layout_marginStart="16dp"/>
+        android:background="@color/overlay_scrim"
+        android:padding="8dp"
+        android:textColor="@android:color/white"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:text="Current API: 默认: https://example.com/" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

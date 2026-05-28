@@ -1,3 +1,18 @@
 <resources>
     <string name="app_name">webqrclient</string>
+
+    <string name="status_initializing">Initializing Camera...</string>
+    <string name="status_scanning">Scanning for QR Code...</string>
+    <string name="status_camera_error">Error starting camera.</string>
+    <string name="status_new_qr_uploading">New QR Detected: %1$s\n⏰Uploading...</string>
+    <string name="status_upload_success">✅Upload Success: %1$s</string>
+    <string name="status_upload_failed">❌Upload Failed: %1$s</string>
+    <string name="status_upload_error">❌Upload Error: %1$s</string>
+
+    <string name="permission_denied">Permissions not granted by the user.</string>
+
+    <string name="api_current_label">Current API: %1$s</string>
+    <string name="api_select_button">Select API</string>
+    <string name="api_select_dialog_title">Select API Endpoint</string>
+    <string name="action_cancel">Cancel</string>
 </resources>

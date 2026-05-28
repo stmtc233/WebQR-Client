@@ -4,17 +4,28 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.util.Log
+import android.view.ViewGroup
 import android.widget.Toast
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.camera.core.*
-import com.google.android.material.color.DynamicColors
+import androidx.camera.core.CameraControl
+import androidx.camera.core.CameraInfo
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updateLayoutParams
+import androidx.core.view.updatePadding
 import androidx.lifecycle.lifecycleScope
 import com.example.webqrclient.data.QrData
 import com.example.webqrclient.databinding.ActivityMainBinding
 import com.example.webqrclient.network.ApiClient
+import com.google.android.material.color.DynamicColors
 import kotlinx.coroutines.launch
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -25,55 +36,82 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cameraExecutor: ExecutorService
 
     private var lastScannedQrData: String? = null
-    private var cameraControl: CameraControl? = null // 新增 CameraControl 变量
+    private var cameraControl: CameraControl? = null
+    private var qrCodeAnalyzer: QrCodeAnalyzer? = null
+
+    private val cameraPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) {
+                startCamera()
+            } else {
+                Toast.makeText(this, R.string.permission_denied, Toast.LENGTH_SHORT).show()
+                finish()
+            }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         DynamicColors.applyToActivitiesIfAvailable(application)
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        ApiClient.initialize(this)
+        applyWindowInsets()
         updateApiUrlStatus()
 
         cameraExecutor = Executors.newSingleThreadExecutor()
 
-        if (allPermissionsGranted()) {
+        if (isCameraPermissionGranted()) {
             startCamera()
         } else {
-            ActivityCompat.requestPermissions(
-                this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS
-            )
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
 
-        binding.switchApiButton.setOnClickListener {
-            showApiSelectionDialog()
+        binding.switchApiButton.setOnClickListener { showApiSelectionDialog() }
+    }
+
+    private fun applyWindowInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            val basePadding = dp(16)
+
+            binding.statusTextView.updatePadding(
+                left = bars.left + basePadding,
+                right = bars.right + basePadding,
+                bottom = bars.bottom + basePadding
+            )
+            binding.apiUrlTextView.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+                topMargin = bars.top + basePadding
+                marginStart = bars.left + basePadding
+            }
+            binding.zoomSlider.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+                bottomMargin = bars.bottom + dp(50)
+            }
+            insets
         }
     }
 
     private fun updateApiUrlStatus() {
-        binding.apiUrlTextView.text = "Current API: ${ApiClient.getCurrentBaseUrl()}"
+        binding.apiUrlTextView.text =
+            getString(R.string.api_current_label, ApiClient.getCurrentBaseUrlLabel())
     }
 
     private fun showApiSelectionDialog() {
-        val availableUrls = ApiClient.availableUrls
-        val urls = availableUrls.map { it.second }.toTypedArray()
-        val displayLabels = availableUrls.map { "${it.first}: ${it.second}" }.toTypedArray()
+        val urls = ApiClient.availableUrls.map { it.second }
+        val displayLabels = ApiClient.availableUrls
+            .map { "${it.first}: ${it.second}" }
+            .toTypedArray()
 
-        val currentUrl = ApiClient.getCurrentBaseUrl()
-        val defaultSelection = availableUrls.indexOfFirst { "${it.first}: ${it.second}" == currentUrl }
-
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("Select API Endpoint")
-            .setSingleChoiceItems(displayLabels, defaultSelection) { dialog, which ->
-                val selectedUrl = urls[which]
-                ApiClient.setBaseUrl(selectedUrl)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.api_select_dialog_title)
+            .setSingleChoiceItems(displayLabels, ApiClient.getSelectedIndex()) { dialog, which ->
+                ApiClient.setBaseUrl(urls[which])
                 updateApiUrlStatus()
                 dialog.dismiss()
             }
-            .setNegativeButton("Cancel") { dialog, _ ->
-                dialog.dismiss()
-            }
+            .setNegativeButton(R.string.action_cancel) { dialog, _ -> dialog.dismiss() }
             .show()
     }
 
@@ -87,66 +125,49 @@ class MainActivity : AppCompatActivity() {
                 it.setSurfaceProvider(binding.previewView.surfaceProvider)
             }
 
+            val analyzer = QrCodeAnalyzer { qrCodeValue ->
+                if (qrCodeValue.isNotEmpty() && qrCodeValue != lastScannedQrData) {
+                    lastScannedQrData = qrCodeValue
+                    runOnUiThread {
+                        binding.statusTextView.text =
+                            getString(R.string.status_new_qr_uploading, qrCodeValue)
+                    }
+                    uploadToServer(qrCodeValue)
+                }
+            }
+            qrCodeAnalyzer = analyzer
+
             val imageAnalyzer = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
-                .also {
-                    it.setAnalyzer(cameraExecutor, QrCodeAnalyzer { qrCodeValue ->
-                        if (qrCodeValue.isNotEmpty() && qrCodeValue != lastScannedQrData) {
-                            lastScannedQrData = qrCodeValue
-                            runOnUiThread {
-                                binding.statusTextView.text = "New QR Detected: $qrCodeValue\n⏰Uploading..."
-                            }
-                            uploadToServer(qrCodeValue)
-                        }
-                    })
-                }
-
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+                .also { it.setAnalyzer(cameraExecutor, analyzer) }
 
             try {
                 cameraProvider.unbindAll()
-
-                // !!! 这里是已修改的部分 !!!
-                // bindToLifecycle 返回一个 Camera 对象
                 val camera = cameraProvider.bindToLifecycle(
-                    this, cameraSelector, preview, imageAnalyzer
+                    this, CameraSelector.DEFAULT_BACK_CAMERA, preview, imageAnalyzer
                 )
-
-                // 从 Camera 对象获取 CameraControl 和 CameraInfo
                 cameraControl = camera.cameraControl
-                val cameraInfo = camera.cameraInfo
-
-                // 设置 Slider 的监听器来控制缩放
-                setupZoomSlider(cameraInfo)
-
-                binding.statusTextView.text = "Scanning for QR Code..."
+                setupZoomSlider(camera.cameraInfo)
+                binding.statusTextView.setText(R.string.status_scanning)
             } catch (exc: Exception) {
                 Log.e(TAG, "Use case binding failed", exc)
-                binding.statusTextView.text = "Error starting camera."
+                binding.statusTextView.setText(R.string.status_camera_error)
             }
-
         }, ContextCompat.getMainExecutor(this))
     }
 
-    // !!! 新增方法：设置缩放 Slider !!!
     private fun setupZoomSlider(cameraInfo: CameraInfo) {
         cameraInfo.zoomState.observe(this) { zoomState ->
-            // 添加对 zoomState 和缩放比例的空值和有效性检查
-            if (zoomState != null) {
-                val minZoom = zoomState.minZoomRatio
-                val maxZoom = zoomState.maxZoomRatio
-                
-                // 确保 minZoom < maxZoom，以避免 Slider 出现问题
-                if (minZoom < maxZoom) {
-                    binding.zoomSlider.valueFrom = minZoom
-                    binding.zoomSlider.valueTo = maxZoom
-                    // 设置初始值，确保 Slider 的 UI 与相机状态同步
-                    binding.zoomSlider.value = zoomState.zoomRatio
-                } else {
-                    // 如果不支持缩放，可以禁用 Slider
-                    binding.zoomSlider.isEnabled = false
-                }
+            if (zoomState == null) return@observe
+            val minZoom = zoomState.minZoomRatio
+            val maxZoom = zoomState.maxZoomRatio
+            if (minZoom < maxZoom) {
+                binding.zoomSlider.valueFrom = minZoom
+                binding.zoomSlider.valueTo = maxZoom
+                binding.zoomSlider.value = zoomState.zoomRatio
+            } else {
+                binding.zoomSlider.isEnabled = false
             }
         }
 
@@ -161,50 +182,37 @@ class MainActivity : AppCompatActivity() {
                 val response = ApiClient.instance.uploadQrCode(QrData(qrCodeValue))
                 if (response.isSuccessful) {
                     Log.d(TAG, "Upload successful for value: $qrCodeValue")
-                    runOnUiThread {
-                        binding.statusTextView.text = "✅Upload Success: $qrCodeValue"
-                    }
+                    binding.statusTextView.text =
+                        getString(R.string.status_upload_success, qrCodeValue)
                 } else {
                     Log.e(TAG, "Upload failed with code: ${response.code()}")
-                    runOnUiThread {
-                        binding.statusTextView.text = "❌Upload Failed: $qrCodeValue"
-                    }
+                    binding.statusTextView.text =
+                        getString(R.string.status_upload_failed, qrCodeValue)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error during upload", e)
-                runOnUiThread {
-                    binding.statusTextView.text = "❌Upload Error: ${e.message}"
-                }
+                binding.statusTextView.text =
+                    getString(R.string.status_upload_error, e.message ?: "")
             }
         }
     }
 
-    private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {
-        ContextCompat.checkSelfPermission(baseContext, it) == PackageManager.PERMISSION_GRANTED
-    }
+    private fun isCameraPermissionGranted(): Boolean =
+        ContextCompat.checkSelfPermission(
+            this, Manifest.permission.CAMERA
+        ) == PackageManager.PERMISSION_GRANTED
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int, permissions: Array<String>, grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_CODE_PERMISSIONS) {
-            if (allPermissionsGranted()) {
-                startCamera()
-            } else {
-                Toast.makeText(this, "Permissions not granted by the user.", Toast.LENGTH_SHORT).show()
-                finish()
-            }
-        }
-    }
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density).toInt()
 
     override fun onDestroy() {
         super.onDestroy()
         cameraExecutor.shutdown()
+        qrCodeAnalyzer?.close()
+        qrCodeAnalyzer = null
     }
 
-    companion object {
-        private const val TAG = "WebQrClient"
-        private const val REQUEST_CODE_PERMISSIONS = 10
-        private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.CAMERA)
+    private companion object {
+        const val TAG = "WebQrClient"
     }
 }
